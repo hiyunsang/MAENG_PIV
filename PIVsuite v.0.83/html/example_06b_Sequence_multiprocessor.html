@@ -1,0 +1,301 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>Example 06b - multiprocessor/multicomputer treatment</title><meta name="generator" content="MATLAB 8.2"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2014-09-05"><meta name="DC.source" content="example_06b_Sequence_multiprocessor.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img { margin-bottom:0px; } 
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, tt, code { font-size:12px; }
+pre { margin:0px 0px 20px; }
+pre.error { color:red; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><h1>Example 06b - multiprocessor/multicomputer treatment</h1><!--introduction--><p>Due to various limitations, PIVsuite works mostly only on a single core of the computer. To improve performance when treating large sets of PIV images, it is advantageous to run several MATLAB instances in order to use all the power of the processor. Each running MATLAB can treat a different part of image sequence (the treatment of a part of image by a single Matlab instance is called "job").</p><p>PIVsuite is able manage distribution of PIV image pairs to several jobs comfortably. This example demonstrates how to use this feature.</p><!--/introduction--><h2>Contents</h2><div><ul><li><a href="#1">How to run this example</a></li><li><a href="#2">Define image pairs to treat</a></li><li><a href="#3">Settings for processing the first image pair</a></li><li><a href="#4">Settings for processing subsequent image pairs</a></li><li><a href="#5">Distribute treatment to several jobs</a></li><li><a href="#6">Supress graphical output, when it is not available</a></li><li><a href="#7">Visualize the results</a></li><li><a href="#8">More details about distribution of the treatment between several jobs</a></li></ul></div><h2>How to run this example<a name="1"></a></h2><div><ul><li>Before running this example, you might want to increase the number of image pairs in folder <tt>../Data/Test Tububu</tt> (e.g., by copying them with another name).</li><li>Start four independent Matlab instances on your computer.</li><li>Run simultaneously this example in each Matlab instance. Thus, there will be four Matlab windows running simultaneously the same example. PIVsuite, via subroutine pivManageJobs, will adjust each of Matlab instance to treat approximately one fourth of image pairs.</li><li>If something goes wrong (e.g., the user stops prematurely the treatment of some part of results), it is useful to erase lock files (extension .lck) in the output folder. For repeating the example, the user should erase all files from the output folder.</li><li>Most of Matlabs will only treat the image pairs and save data to the disk, without storing results of all the image sequence. Only one Matlab instances will "remember" the results of the sequence.</li><li>Running the example once more (after all image pairs are treated) will load the results from the files with results.</li></ul></div><p>Other hints are:</p><div><ul><li>The treatment can be distributed also to several computers (typically if they access the same data on a shared disk via a network). In such a case, share a folder with data, and run some of matlabs on one computer and the remaining on another.</li><li>Total number of jobs is given by <tt>pivPar.jmParallelJobs</tt> option below. This parameter should correspond to the number of Matlab instances running this example. Generally, fastes treatment is obtained if the number of Matlab instances is the same as the number of available processor cores.</li><li>It is suitable to run several Matlab instances automatically from a command line in the Linux OS. A shell script for doing so is provided with this example (<tt>startntimes.sh</tt>).</li></ul></div><h2>Define image pairs to treat<a name="2"></a></h2><p>Initialize the variable <tt>pivPar</tt>, in which parameters of PIV algorithm (such as interrogation area size) are defined. Initialize also variable <tt>pivData</tt>, to which results will be stored.</p><pre class="codeinput"><span class="comment">% Initialize variables</span>
+clear;
+pivPar = [];                                              <span class="comment">% variable for settings</span>
+pivData = [];                                             <span class="comment">% variable for storing results</span>
+imagePath = <span class="string">'../Data/Test Tububu'</span>;  <span class="comment">% folder with processed images (use slash (/) as path separator both on Windows</span>
+                                    <span class="comment">% and Unix platforms; do not use backslash (\), and do not use 'filesep')</span>
+
+<span class="comment">% get list of images in the folder and sort them</span>
+aux = dir([imagePath, <span class="string">'/*.bmp'</span>]);
+<span class="keyword">for</span> kk = 1:numel(aux), fileList{kk} = [imagePath, <span class="string">'/'</span>, aux(kk).name]; <span class="keyword">end</span>   <span class="comment">%#ok&lt;SAGROW&gt;</span>
+fileList = sort(fileList);
+
+<span class="comment">% Define image pairs</span>
+pivPar.seqPairInterval = 1;     <span class="comment">% all image pairs will be processed in this example</span>
+pivPar.seqSeqDiff = 1;          <span class="comment">% the second image in each pair is one frame after the first image</span>
+[im1,im2] = pivCreateImageSequence(fileList,pivPar);
+</pre><h2>Settings for processing the first image pair<a name="3"></a></h2><p>These settings will be used only for processing of the first image pair:</p><pre class="codeinput">pivParInit.iaSizeX = [64 32 32 32 32];      <span class="comment">% interrogation area size for five passes</span>
+pivParInit.iaStepX = [32 16 12 12 12];      <span class="comment">% grid spacing for five passes</span>
+pivParInit.qvPair = {<span class="keyword">...</span><span class="comment">                    % define plot shown between iterations</span>
+    <span class="string">'Umag'</span>,<span class="string">'clipHi'</span>,3,<span class="keyword">...</span><span class="comment">                                 % plot displacement magnitude, clip to 3 px</span>
+    <span class="string">'quiver'</span>,<span class="string">'selectStat'</span>,<span class="string">'valid'</span>,<span class="string">'linespec'</span>,<span class="string">'-k'</span>,<span class="keyword">...</span><span class="comment">     % show valid vectors in black</span>
+    <span class="string">'quiver'</span>,<span class="string">'selectStat'</span>,<span class="string">'replaced'</span>,<span class="string">'linespec'</span>,<span class="string">'-w'</span>};    <span class="comment">% show replaced vectors in white</span>
+pivParInit = pivParams([],pivParInit,<span class="string">'defaults'</span>);   <span class="comment">% set defaults as if treating single image pair</span>
+</pre><h2>Settings for processing subsequent image pairs<a name="4"></a></h2><p>Subsequent image pairs will be trated with these settings:</p><pre class="codeinput">pivPar.iaSizeX = [32 32];                 <span class="comment">% IA size; carry only two iterations for subsequent image pairs</span>
+pivPar.iaStepX = [12 12];                 <span class="comment">% grid spacing</span>
+pivPar.anVelocityEst = <span class="string">'previousSmooth'</span>;  <span class="comment">% use smoothed velocity from previous image pair as velocity</span>
+                                          <span class="comment">% estimate for image deformation</span>
+pivPar.anOnDrive = true;                  <span class="comment">% files with results will be stored in an output folder</span>
+pivPar.anTargetPath = [imagePath,<span class="string">'/pivOut_multicore'</span>];
+                                          <span class="comment">% directory for storing results</span>
+pivPar.anForceProcessing = false;         <span class="comment">% if false, only image pairs, for which no file with results is</span>
+            <span class="comment">% available, will be processed. Processing is skipped if file with results is available. If true,</span>
+            <span class="comment">% processing is carried out even if result file is present. (Set this parameter to true if all</span>
+            <span class="comment">% image pairs should be reprocessed, for example because of different setting of processing</span>
+            <span class="comment">% parameters).</span>
+
+pivPar.qvPair = {<span class="keyword">...</span><span class="comment">                      % define plot shown between iterations</span>
+    <span class="string">'Umag'</span>,<span class="string">'clipHi'</span>,3,<span class="keyword">...</span><span class="comment">                                 % plot displacement magnitude, clip to 3 px</span>
+    <span class="string">'quiver'</span>,<span class="string">'selectStat'</span>,<span class="string">'valid'</span>,<span class="string">'linespec'</span>,<span class="string">'-k'</span>,<span class="keyword">...</span><span class="comment">     % show valid vectors in black</span>
+    <span class="string">'quiver'</span>,<span class="string">'selectStat'</span>,<span class="string">'replaced'</span>,<span class="string">'linespec'</span>,<span class="string">'-w'</span>};    <span class="comment">% show replaced vectors in white</span>
+
+<span class="comment">% Set all other parameters to defaults:</span>
+
+[pivPar, pivData] = pivParams(pivData,pivPar,<span class="string">'defaultsSeq'</span>);
+</pre><h2>Distribute treatment to several jobs<a name="5"></a></h2><p>Parameter <tt>jmParallelJobs</tt> defines, how many parallel jobs will be treating the image sequence (each job will treat a part of image pairs). Using soubroutine <tt>pivManageJobs</tt>, a part of image pair is attributed to the current job.</p><pre class="codeinput">figure(1);
+pivPar.jmParallelJobs = 1;
+[im1,im2,pivPar] = pivManageJobs(im1,im2,pivPar);
+[pivData] = pivAnalyzeImageSequence(im1,im2,pivData,pivPar,pivParInit);
+</pre><pre class="codeoutput">Job distribution read from file. 
+Initialization: Analyzing first image pair... Results found (pivInit_Img000001_Img000002.mat). Skipping processing.
+Treating pair 1 of 39 (???)... Results found (piv_Img000001_Img000002.mat). Skipping processing.
+Treating pair 2 of 39 (???)... Results found (piv_Img000002_Img000003.mat). Skipping processing.
+Treating pair 3 of 39 (???)... Results found (piv_Img000003_Img000004.mat). Skipping processing.
+Treating pair 4 of 39 (???)... Results found (piv_Img000004_Img000005.mat). Skipping processing.
+Treating pair 5 of 39 (???)... Results found (piv_Img000005_Img000006.mat). Skipping processing.
+Treating pair 6 of 39 (???)... Results found (piv_Img000006_Img000007.mat). Skipping processing.
+Treating pair 7 of 39 (???)... Results found (piv_Img000007_Img000008.mat). Skipping processing.
+Treating pair 8 of 39 (???)... Results found (piv_Img000008_Img000009.mat). Skipping processing.
+Treating pair 9 of 39 (???)... Results found (piv_Img000009_Img000010.mat). Skipping processing.
+Treating pair 10 of 39 (???)... Results found (piv_Img000010_Img000011.mat). Skipping processing.
+Treating pair 11 of 39 (???)... Results found (piv_Img000011_Img000012.mat). Skipping processing.
+Treating pair 12 of 39 (???)... Results found (piv_Img000012_Img000013.mat). Skipping processing.
+Treating pair 13 of 39 (???)... Results found (piv_Img000013_Img000014.mat). Skipping processing.
+Treating pair 14 of 39 (???)... Results found (piv_Img000014_Img000015.mat). Skipping processing.
+Treating pair 15 of 39 (???)... Results found (piv_Img000015_Img000016.mat). Skipping processing.
+Treating pair 16 of 39 (???)... Results found (piv_Img000016_Img000017.mat). Skipping processing.
+Treating pair 17 of 39 (???)... Results found (piv_Img000017_Img000018.mat). Skipping processing.
+Treating pair 18 of 39 (???)... Results found (piv_Img000018_Img000019.mat). Skipping processing.
+Treating pair 19 of 39 (???)... Results found (piv_Img000019_Img000020.mat). Skipping processing.
+Treating pair 20 of 39 (???)... Results found (piv_Img000020_Img000021.mat). Skipping processing.
+Treating pair 21 of 39 (???)... Results found (piv_Img000021_Img000022.mat). Skipping processing.
+Treating pair 22 of 39 (???)... Results found (piv_Img000022_Img000023.mat). Skipping processing.
+Treating pair 23 of 39 (???)... Results found (piv_Img000023_Img000024.mat). Skipping processing.
+Treating pair 24 of 39 (???)... Results found (piv_Img000024_Img000025.mat). Skipping processing.
+Treating pair 25 of 39 (???)... Results found (piv_Img000025_Img000026.mat). Skipping processing.
+Treating pair 26 of 39 (???)... Results found (piv_Img000026_Img000027.mat). Skipping processing.
+Treating pair 27 of 39 (???)... Results found (piv_Img000027_Img000028.mat). Skipping processing.
+Treating pair 28 of 39 (???)... Results found (piv_Img000028_Img000029.mat). Skipping processing.
+Treating pair 29 of 39 (???)... Results found (piv_Img000029_Img000030.mat). Skipping processing.
+Treating pair 30 of 39 (???)... Results found (piv_Img000030_Img000031.mat). Skipping processing.
+Treating pair 31 of 39 (???)... Results found (piv_Img000031_Img000032.mat). Skipping processing.
+Treating pair 32 of 39 (???)... Results found (piv_Img000032_Img000033.mat). Skipping processing.
+Treating pair 33 of 39 (???)... Results found (piv_Img000033_Img000034.mat). Skipping processing.
+Treating pair 34 of 39 (???)... Results found (piv_Img000034_Img000035.mat). Skipping processing.
+Treating pair 35 of 39 (???)... Results found (piv_Img000035_Img000036.mat). Skipping processing.
+Treating pair 36 of 39 (???)... Results found (piv_Img000036_Img000037.mat). Skipping processing.
+Treating pair 37 of 39 (???)... Results found (piv_Img000037_Img000038.mat). Skipping processing.
+Treating pair 38 of 39 (???)... Results found (piv_Img000038_Img000039.mat). Skipping processing.
+Treating pair 39 of 39 (???)... Accomplished in 5.25 s, last pass 2.33 s, Subpix failure 0.38 %, Median-test rejection 3.01 %
+Replacing spurious velocity vectors... Finished in 0.09 s.
+</pre><img vspace="5" hspace="5" src="example_06b_Sequence_multiprocessor_01.png" alt=""> <h2>Supress graphical output, when it is not available<a name="6"></a></h2><p>This part of code is useful when mass calculations are started on Unix/Linux machines. Usually, Matlab is run just from a command line and graphical output would yield an error, because graphical interface is not available. Therefore, if no output window is avaiable, this example is finished prematuraly. Also, the treatment is interrupted here, if no data are output from the treatment (this is the case for most of jobs, as they are not "remembering" results for all the image sequence).</p><pre class="codeinput"><span class="keyword">if</span> ~isstruct(pivData)|| ~usejava(<span class="string">'jvm'</span>) || ~usejava(<span class="string">'desktop'</span>) || ~feature(<span class="string">'ShowFigureWindows'</span>)
+    <span class="keyword">return</span>;
+<span class="keyword">end</span>
+</pre><h2>Visualize the results<a name="7"></a></h2><p>Show a movie:</p><pre class="codeinput">figure(2);
+<span class="keyword">for</span> kt = 1:pivData.Nt
+    pivQuiver(pivData,<span class="string">'TimeSlice'</span>,kt,<span class="keyword">...</span><span class="comment">   % choose data and time to show</span>
+        <span class="string">'V'</span>,<span class="string">'clipLo'</span>,-1,<span class="string">'clipHi'</span>,3,<span class="keyword">...</span><span class="comment">   % vertical velocity,</span>
+        <span class="string">'quiver'</span>,<span class="string">'selectStat'</span>,<span class="string">'valid'</span>);    <span class="comment">% velocity vectors,</span>
+    drawnow;
+    pause(0.04);
+<span class="keyword">end</span>
+</pre><img vspace="5" hspace="5" src="example_06b_Sequence_multiprocessor_02.png" alt=""> <h2>More details about distribution of the treatment between several jobs<a name="8"></a></h2><p>For more details, see description available in subroutine <tt>pivManageJobs.m</tt>.</p><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2013b</a><br></p></div><!--
+##### SOURCE BEGIN #####
+%% Example 06b - multiprocessor/multicomputer treatment
+% Due to various limitations, PIVsuite works mostly only on a single core of the computer. To improve
+% performance when treating large sets of PIV images, it is advantageous to run several MATLAB instances in
+% order to use all the power of the processor. Each running MATLAB can treat a different part of image
+% sequence (the treatment of a part of image by a single Matlab instance is called "job").
+%
+% PIVsuite is able manage distribution of PIV image pairs to several jobs comfortably. This example
+% demonstrates how to use this feature.
+
+%% How to run this example
+%
+% * Before running this example, you might want to increase the number of image pairs in folder |../Data/Test
+% Tububu| (e.g., by copying them with another name).
+% * Start four independent Matlab instances on your computer.
+% * Run simultaneously this example in each Matlab instance. Thus, there will be four Matlab windows running
+% simultaneously the same example. PIVsuite, via subroutine pivManageJobs, will adjust each of Matlab instance
+% to treat approximately one fourth of image pairs.
+% * If something goes wrong (e.g., the user stops prematurely the treatment of some part of results), it is useful
+% to erase lock files (extension .lck) in the output folder. For repeating the example, the user should erase all
+% files from the output folder.
+% * Most of Matlabs will only treat the image pairs and save data to the disk, without storing results of all
+% the image sequence. Only one Matlab instances will "remember" the results of the sequence.
+% * Running the example once more (after all image pairs are treated) will load the results from the files
+% with results.
+% 
+% Other hints are:
+% 
+% * The treatment can be distributed also to several computers (typically if they access the same data on a
+% shared disk via a network). In such a case, share a folder with data, and run some of matlabs on one computer
+% and the remaining on another.
+% * Total number of jobs is given by |pivPar.jmParallelJobs| option below. This parameter should correspond to
+% the number of Matlab instances running this example. Generally, fastes treatment is obtained if the number
+% of Matlab instances is the same as the number of available processor cores.
+% * It is suitable to run several Matlab instances automatically from a command line in the Linux OS. A shell
+% script for doing so is provided with this example (|startntimes.sh|).
+
+
+%% Define image pairs to treat
+% Initialize the variable |pivPar|, in which parameters of PIV algorithm (such as interrogation area size) are 
+% defined. Initialize also variable |pivData|, to which results will be stored.
+
+% Initialize variables
+clear;
+pivPar = [];                                              % variable for settings
+pivData = [];                                             % variable for storing results
+imagePath = '../Data/Test Tububu';  % folder with processed images (use slash (/) as path separator both on Windows 
+                                    % and Unix platforms; do not use backslash (\), and do not use 'filesep')
+
+% get list of images in the folder and sort them
+aux = dir([imagePath, '/*.bmp']);                 
+for kk = 1:numel(aux), fileList{kk} = [imagePath, '/', aux(kk).name]; end   %#ok<SAGROW>
+fileList = sort(fileList);
+
+% Define image pairs
+pivPar.seqPairInterval = 1;     % all image pairs will be processed in this example
+pivPar.seqSeqDiff = 1;          % the second image in each pair is one frame after the first image
+[im1,im2] = pivCreateImageSequence(fileList,pivPar);
+
+%% Settings for processing the first image pair
+% These settings will be used only for processing of the first image pair:
+
+pivParInit.iaSizeX = [64 32 32 32 32];      % interrogation area size for five passes
+pivParInit.iaStepX = [32 16 12 12 12];      % grid spacing for five passes
+pivParInit.qvPair = {...                    % define plot shown between iterations
+    'Umag','clipHi',3,...                                 % plot displacement magnitude, clip to 3 px      
+    'quiver','selectStat','valid','linespec','-k',...     % show valid vectors in black
+    'quiver','selectStat','replaced','linespec','-w'};    % show replaced vectors in white
+pivParInit = pivParams([],pivParInit,'defaults');   % set defaults as if treating single image pair
+
+%% Settings for processing subsequent image pairs
+% Subsequent image pairs will be trated with these settings:
+
+pivPar.iaSizeX = [32 32];                 % IA size; carry only two iterations for subsequent image pairs
+pivPar.iaStepX = [12 12];                 % grid spacing 
+pivPar.anVelocityEst = 'previousSmooth';  % use smoothed velocity from previous image pair as velocity 
+                                          % estimate for image deformation
+pivPar.anOnDrive = true;                  % files with results will be stored in an output folder
+pivPar.anTargetPath = [imagePath,'/pivOut_multicore'];
+                                          % directory for storing results
+pivPar.anForceProcessing = false;         % if false, only image pairs, for which no file with results is 
+            % available, will be processed. Processing is skipped if file with results is available. If true,
+            % processing is carried out even if result file is present. (Set this parameter to true if all
+            % image pairs should be reprocessed, for example because of different setting of processing
+            % parameters).
+            
+pivPar.qvPair = {...                      % define plot shown between iterations
+    'Umag','clipHi',3,...                                 % plot displacement magnitude, clip to 3 px      
+    'quiver','selectStat','valid','linespec','-k',...     % show valid vectors in black
+    'quiver','selectStat','replaced','linespec','-w'};    % show replaced vectors in white
+
+% Set all other parameters to defaults:
+
+[pivPar, pivData] = pivParams(pivData,pivPar,'defaultsSeq');
+            
+%% Distribute treatment to several jobs
+% Parameter |jmParallelJobs| defines, how many parallel jobs will be treating the image sequence (each job will
+% treat a part of image pairs). Using soubroutine |pivManageJobs|, a part of image pair is attributed to the
+% current job.
+
+figure(1);
+pivPar.jmParallelJobs = 1;
+[im1,im2,pivPar] = pivManageJobs(im1,im2,pivPar);
+[pivData] = pivAnalyzeImageSequence(im1,im2,pivData,pivPar,pivParInit);
+
+%% Supress graphical output, when it is not available
+% This part of code is useful when mass calculations are started on Unix/Linux machines. Usually, Matlab is
+% run just from a command line and graphical output would yield an error, because graphical interface is not
+% available. Therefore, if no output window is avaiable, this example is finished prematuraly. Also, the
+% treatment is interrupted here, if no data are output from the treatment (this is the case for most of jobs,
+% as they are not "remembering" results for all the image sequence).
+
+if ~isstruct(pivData)|| ~usejava('jvm') || ~usejava('desktop') || ~feature('ShowFigureWindows')
+    return;
+end
+
+%% Visualize the results
+% Show a movie:
+
+figure(2);
+for kt = 1:pivData.Nt
+    pivQuiver(pivData,'TimeSlice',kt,...   % choose data and time to show
+        'V','clipLo',-1,'clipHi',3,...   % vertical velocity,
+        'quiver','selectStat','valid');    % velocity vectors,
+    drawnow;
+    pause(0.04);
+end
+
+%% More details about distribution of the treatment between several jobs
+% For more details, see description available in subroutine |pivManageJobs.m|.
+##### SOURCE END #####
+--></body></html>

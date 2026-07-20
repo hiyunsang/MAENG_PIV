@@ -1,0 +1,7 @@
+# Large data files
+Data/
+
+# Image files
+*.tif
+*.tiff
+*.bmp
