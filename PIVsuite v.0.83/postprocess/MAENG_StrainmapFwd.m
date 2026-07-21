@@ -51,8 +51,7 @@ function out = MAENG_StrainmapFwd(pivData)
 %      ≤2×FILL_GAP 틈만 추가 채움. ⚠ NaN '전부' 채우기(무차별 inpaint)는
 %      금지: 공기에 가상유동 생성 + 실공극 가로지르는 가짜 유동/변형률
 %      (과거 실패 기록 참조). 분절 칩 실공극은 채우면 안 되므로 FILL_GAP은
-%      공극 폭보다 작게. 근본 해법은 ccPeak 기반 재료 마스크
-%      (MAENG_MaterialMaskCheck.m) 통합 — 추후 작업.
+%      공극 폭보다 작게. 근본 해법은 ccPeak 기반 재료 마스크 통합 — 추후 작업.
 %   9) ★ 노이즈 정류 보정(EPS_MODE): dε̄=√(제곱합)은 양수 정의라 강체
 %      평행이동/단순 상승 중에도 PIV 노이즈 구배가 매 프레임 양의 증분으로
 %      정류 누적됨(1000프레임 = Nf×노이즈바닥의 가짜 변형률). 회전은 dε̄
@@ -65,8 +64,8 @@ function out = MAENG_StrainmapFwd(pivData)
 %      [시도·철회] V_STATIC(전 프레임 |V|<문턱 셀을 벽으로 흡수) —
 %      정체점/BUE/저속 재료를 배경으로 오분류할 구조적 위험으로 롤백함.
 %      속도 크기만으로는 '정지 배경'과 '정지 재료(BUE)'를 구분 불가.
-%      올바른 해법 = ccPeak 기반 프레임별 재료 마스크(MAENG_MaterialMaskCheck.m)
-%      를 frame_wall에 통합해 재료/배경을 상관품질로 구분 — 추후 작업.
+%      올바른 해법 = ccPeak 기반 프레임별 재료 마스크를 frame_wall에 통합해
+%      재료/배경을 상관품질로 구분 — 추후 작업.
 %      임시 완화: EPS_MODE gate가 줄무늬 일부를 흡수(바닥 이하 성분만).
 %  11) ★ 스냅샷/사후 추출(REC_EVERY + ASK_EXTRACT): 실행 중 REC_EVERY
 %      프레임마다 입자·streakline 상태를 out.snap에 기록. 실행이 끝나면

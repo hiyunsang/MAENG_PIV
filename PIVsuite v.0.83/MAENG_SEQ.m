@@ -1,7 +1,7 @@
 %% MAENG_SEQ - 마스크 적용 이미지 시퀀스 PIV 분석 (데이터 저장/불러오기 기능 포함)
 % 마스크 파일 경로를 직접 입력하는 가장 안정적인 방식의 시퀀스 파이프라인입니다.
 % 분석 후 후처리는 postprocess 폴더의 MAENG_* 함수들을 사용하세요.
-%   (예: MAENG_EffStrain, MAENG_Strainmap, MAENG_VisualizePairFromSequence ...)
+%   (예: MAENG_EffStrain, MAENG_StrainmapFwd, MAENG_VisualizePairFromSequence ...)
 
 clear;
 pivPar = [];      % PIV 분석 설정을 저장할 구조체 초기화
