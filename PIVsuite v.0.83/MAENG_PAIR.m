@@ -13,8 +13,9 @@ addpath(fullfile(thisDir,'core'), fullfile(thisDir,'postprocess'));
 
 %% 1. 이미지 · 마스크 경로 및 프레임 선택
 % 데이터 폴더는 스크립트 위치 기준 절대경로로 고정 (MATLAB 현재 폴더와 무관하게 동작)
-dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', '0602_400_27999_29034'), '\', '/');
-maskPath  = [dataRoot, '/mask.bmp'];   % 마스크 이미지 경로
+dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', 'pair'), '\', '/');
+USE_MASK  = true;                      % ★ 마스크 on/off (false면 마스크 없이 전체 영역 분석)
+maskPath  = [dataRoot, '/mask.bmp'];   % 마스크 이미지 경로 (USE_MASK=false면 무시됨)
 imagePath = dataRoot;                  % PIV 원본 이미지 폴더
 
 frameA = 1;       % ★ 비교할 첫 번째 프레임 번호
@@ -36,18 +37,25 @@ im2 = fileList{frameB};
 fprintf('페어 분석: Frame %d (%s)  vs  Frame %d (%s)\n', ...
         frameA, aux(frameA).name, frameB, aux(frameB).name);
 
-%% 2. 마스크 적용
+%% 2. 마스크 적용 (USE_MASK=false면 건너뜀)
 % 파일 경로(문자열)를 그대로 전달하면 PIVsuite 내부에서 이진화 마스킹을 수행합니다.
-pivPar.imMask1 = maskPath;
-pivPar.imMask2 = maskPath;
+if USE_MASK
+    pivPar.imMask1 = maskPath;
+    pivPar.imMask2 = maskPath;
+else
+    fprintf('>> 마스크 OFF — 전체 영역을 분석합니다.\n');
+end
 
 %% 3. PIV 파라미터 (MAENG_SEQ와 동일한 다중 pass 구성)
 pivPar.iaSizeX = [32 16 8];    % 각 pass의 IA(조사창) 크기
 pivPar.iaStepX = [12 8 4];     % 공간 분해능(격자 간격)
 
-% [안정성 확보] 마스킹된 빈 공간을 억지로 보간하려다 발생하는
+% [안정성 확보] 마스크 사용 시: 마스킹된 빈 공간을 억지로 보간하려다 발생하는
 % inpaint_nans (Rank deficient) 에러를 방지하기 위해 대체(Replacement) 기능을 끕니다.
-pivPar.rpMethod = 'none';
+% 마스크 미사용 시: 엔진 기본값('inpaint')을 그대로 써서 불량 벡터를 대체합니다.
+if USE_MASK
+    pivPar.rpMethod = 'none';
+end
 
 % 벡터 검증 (Westerweel median test 기반)
 pivPar.vlMinCC  = 0.3;         % 정규화 상호상관이 중앙값의 0.3 미만이면 기각
@@ -61,10 +69,12 @@ pivPar.smMethod = 'smoothn';   % 'none' | 'Gauss' | 'smoothn'
 pivPar.smSigma  = 0.1;         % 클수록 부드러움 (NaN = 자동)
 
 % 계산 중간 과정 모니터링 플롯
+% qScale 양수 = 화살표 길이를 "변위 x 배수"로 고정 (자동 스케일은 배경이
+% 정지해 있으면 기준 퍼센타일이 붕괴해 화살표가 비정상적으로 커짐)
 pivPar.qvPair = {...
     'Umag','clipHi',3,...
-    'quiver','selectStat','valid','linespec','-k',...
-    'quiver','selectStat','replaced','linespec','-w'};
+    'quiver','selectStat','valid','linespec','-k','qScale',3,...
+    'quiver','selectStat','replaced','linespec','-w','qScale',3};
 
 % 누락된 파라미터를 페어 분석용 기본값으로 자동 보완
 [pivPar, pivData] = pivParams(pivData, pivPar, 'defaults');
@@ -90,10 +100,18 @@ fprintf('결과 저장: %s\n', outFile);
 colorMin = 0;      % 컬러바 최솟값
 colorMax = 2.0;    % 컬러바 최댓값 (데이터 유속에 맞게 조절)
 
+QUIVER_STEP  = 4;    % 화살표 밀도: 격자 N칸마다 1개 (키우면 성기게)
+QUIVER_SCALE = 3;    % 화살표 길이 = 변위(px) x 배수
+
 figure(2);
-pivQuiver(pivData, ...
-    'Umag', 'clipLo', colorMin, 'clipHi', colorMax, ...
-    'quiver', 'selectStat', 'valid');
+pivQuiver(pivData, 'Umag', 'clipLo', colorMin, 'clipHi', colorMax);
+hold on;
+ii = 1:QUIVER_STEP:size(pivData.X,1);
+jj = 1:QUIVER_STEP:size(pivData.X,2);
+quiver(pivData.X(ii,jj), pivData.Y(ii,jj), ...
+       QUIVER_SCALE*pivData.U(ii,jj), QUIVER_SCALE*pivData.V(ii,jj), ...
+       0, 'k');    % 0 = MATLAB 자동 스케일 끔 (길이 고정 배율)
+hold off;
 colorbar;
 caxis([colorMin, colorMax]);   % R2022a 이상은 clim([colorMin, colorMax]);
 title(sprintf('Velocity magnitude (Frame %d \\rightarrow %d)', frameA, frameB), 'FontSize', 12);

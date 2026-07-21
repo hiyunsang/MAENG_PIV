@@ -13,8 +13,9 @@ addpath(fullfile(thisDir,'core'), fullfile(thisDir,'postprocess'));
 
 %% 1. 이미지 및 마스크 경로 설정
 % 데이터 폴더는 스크립트 위치 기준 절대경로로 고정 (MATLAB 현재 폴더와 무관하게 동작)
-dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', '0602_400_27999_29034'), '\', '/');
-maskPath  = [dataRoot, '/mask.bmp'];   % 마스크 이미지 경로
+dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', 'T2_T3'), '\', '/');
+USE_MASK  = true;                      % ★ 마스크 on/off (false면 마스크 없이 전체 영역 분석)
+maskPath  = [dataRoot, '/mask.bmp'];   % 마스크 이미지 경로 (USE_MASK=false면 무시됨)
 imagePath = dataRoot;                  % PIV 원본 이미지 경로
 
 % 폴더 내의 .tif 확장자를 가진 모든 이미지 목록을 불러옵니다.
@@ -25,19 +26,23 @@ for kk = 1:numel(aux)
 end
 fileList = sort(fileList); % 프레임 순서에 맞게 정렬
 
-%% 2. 마스크 적용
+%% 2. 마스크 적용 (USE_MASK=false면 건너뜀)
 % 이미지를 imread로 불러오지 않고, 파일 경로(문자열) 자체를 파라미터로 넘깁니다.
 % PIVsuite 내부에서 자동으로 이미지를 읽고 적절한 이진화 마스킹을 수행합니다.
-pivPar.imMask1 = maskPath;      
-pivPar.imMask2 = maskPath;      
+if USE_MASK
+    pivPar.imMask1 = maskPath;
+    pivPar.imMask2 = maskPath;
+else
+    fprintf('>> 마스크 OFF — 전체 영역을 분석합니다.\n');
+end
 
 %% 3. 시퀀스 파라미터 및 데이터 저장(Save/Load) 설정
 pivPar.seqPairInterval = 1;
 pivPar.seqDiff = 1;             % 페어 내 프레임 간격 (1-2, 2-3 ...)
 [im1,im2] = pivCreateImageSequence(fileList,pivPar);
 
-pivPar.iaSizeX = [32 16 8];   % 4번의 pass에 대한 IA 크기
-pivPar.iaStepX = [12 8 4];     % 공간 분해능(해상도)
+pivPar.iaSizeX = [48 24 12];   % 4번의 pass에 대한 IA 크기
+pivPar.iaStepX = [24 12 6];     % 공간 분해능(해상도)
 
 % -------------------------------------------------------------------------
 % [데이터 저장 및 불러오기 설정]
@@ -48,15 +53,18 @@ pivPar.anForceProcessing = false;         % false: 파일이 존재하면 재계
 % -------------------------------------------------------------------------
 
 % -------------------------------------------------------------------------
-% [안정성 확보] 마스킹된 빈 공간을 억지로 보간(Interpolate)하려다 발생하는 
-% inpaint_nans (Rank deficient) 에러를 방지하기 위해 대체(Replacement) 기능을 끕니다.
-pivPar.rpMethod = 'none';  
+% [안정성 확보] 마스크 사용 시: 마스킹된 빈 공간을 억지로 보간(Interpolate)하려다
+% 발생하는 inpaint_nans (Rank deficient) 에러를 방지하기 위해 대체 기능을 끕니다.
+% 마스크 미사용 시: 엔진 기본값('inpaint')을 그대로 써서 불량 벡터를 대체합니다.
+if USE_MASK
+    pivPar.rpMethod = 'none';
+end
 % -------------------------------------------------------------------------
 
 pivPar.qvPair = {...                 % 계산 중간 과정을 모니터링하기 위한 플롯 설정
     'Umag','clipHi',3,...                                 
-    'quiver','selectStat','valid','linespec','-k',...     
-    'quiver','selectStat','replaced','linespec','-w'};    
+    'quiver','selectStat','valid','linespec','-k','qScale',3,...     
+    'quiver','selectStat','replaced','linespec','-w','qScale',3};    
 
 % 누락된 파라미터들을 시퀀스 분석용 기본값('defaultsSeq')으로 자동 보완
 [pivPar, pivData] = pivParams(pivData,pivPar,'defaultsSeq');
@@ -102,7 +110,7 @@ for kt = 1:pivData.Nt
     % 'quiver' 옵션에서 subtractV를 제거하여 실제 유동 방향 화살표를 보여줍니다.
     pivQuiver(pivData,'TimeSlice',kt,...   
         'Umag', 'clipLo', colorMin, 'clipHi', colorMax,... % 속도 크기(Magnitude) 렌더링 및 범위 제한
-        'quiver','selectStat','valid');                    % 유효한(valid) 벡터 화살표만 출력
+        'quiver','selectStat','valid','qScale',3);                    % 유효한(valid) 벡터 화살표만 출력
     
     % 컬러바를 활성화하고 설정한 범위로 디스플레이 스케일을 단단히 고정합니다.
     colorbar; 

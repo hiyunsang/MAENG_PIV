@@ -38,7 +38,8 @@ cleanStaleJobs = true;
 %% ===== 공통 설정 (코디네이터·워커가 공유) =====
 % 데이터 폴더는 스크립트 위치 기준 절대경로로 고정 (MATLAB 현재 폴더와 무관하게 동작)
 dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', '0612', '1-100-7882-9724'), '\', '/');
-maskPath  = [dataRoot, '/100mask.bmp'];   % 마스크 이미지 경로
+USE_MASK  = true;                         % ★ 마스크 on/off (false면 마스크 없이 전체 영역 분석)
+maskPath  = [dataRoot, '/100mask.bmp'];   % 마스크 이미지 경로 (USE_MASK=false면 무시됨)
 imagePath = dataRoot;                     % PIV 원본 이미지 폴더
 
 % 폴더 내 .tif 이미지 목록을 불러와 프레임 순서대로 정렬
@@ -53,8 +54,12 @@ pivPar  = [];      % PIV 분석 설정
 pivData = [];      % 분석 결과
 
 % 마스크: 경로(문자열)를 그대로 전달하면 PIVsuite가 내부에서 이진화 처리
-pivPar.imMask1 = maskPath;
-pivPar.imMask2 = maskPath;
+if USE_MASK
+    pivPar.imMask1 = maskPath;
+    pivPar.imMask2 = maskPath;
+else
+    fprintf('>> 마스크 OFF — 전체 영역을 분석합니다.\n');
+end
 
 % 시퀀스 구성 (1-2, 2-3, 3-4 ...)
 pivPar.seqPairInterval = 1;
@@ -72,8 +77,11 @@ pivPar.anOnDrive         = true;
 pivPar.anTargetPath      = [imagePath,'/pivOut'];   % 결과/락파일 저장 폴더
 pivPar.anForceProcessing = false;                   % true로 두면 전부 재계산
 
-% 마스킹된 빈 공간을 억지로 보간하다 나는 inpaint_nans 에러 방지
-pivPar.rpMethod = 'none';
+% 마스크 사용 시: 마스킹된 빈 공간을 억지로 보간하다 나는 inpaint_nans 에러 방지
+% 마스크 미사용 시: 엔진 기본값('inpaint')으로 불량 벡터 대체
+if USE_MASK
+    pivPar.rpMethod = 'none';
+end
 
 % [엄밀 재현이 필요하면 주석 해제] 프레임 간 의존을 끊어, 분할 여부와 무관하게
 % 단일 실행과 비트 단위로 동일한 결과를 보장합니다(기본 'previous'와 미세하게
@@ -83,8 +91,8 @@ pivPar.rpMethod = 'none';
 % 계산 중 모니터링 플롯 설정(헤드리스 워커에서는 자동으로 무시됨)
 pivPar.qvPair = {...
     'Umag','clipHi',3,...
-    'quiver','selectStat','valid','linespec','-k',...
-    'quiver','selectStat','replaced','linespec','-w'};
+    'quiver','selectStat','valid','linespec','-k','qScale',3,...
+    'quiver','selectStat','replaced','linespec','-w','qScale',3};
 
 % 누락 파라미터를 시퀀스 기본값으로 자동 보완
 [pivPar, pivData] = pivParams(pivData,pivPar,'defaultsSeq');
@@ -219,7 +227,7 @@ for kt = 1:pivData.Nt
     % 'quiver' 옵션에서 subtractV를 제거하여 실제 유동 방향 화살표를 보여줍니다.
     pivQuiver(pivData,'TimeSlice',kt,...   
         'Umag', 'clipLo', colorMin, 'clipHi', colorMax,... % 속도 크기(Magnitude) 렌더링 및 범위 제한
-        'quiver','selectStat','valid');                    % 유효한(valid) 벡터 화살표만 출력
+        'quiver','selectStat','valid','qScale',3);                    % 유효한(valid) 벡터 화살표만 출력
     
     % 컬러바를 활성화하고 설정한 범위로 디스플레이 스케일을 단단히 고정합니다.
     colorbar; 

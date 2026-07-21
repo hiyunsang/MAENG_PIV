@@ -11,8 +11,8 @@ function eff = MAENG_EffStrain(pivData)
   VIS_COLORMAP     = 'jet';
   VIS_TRANSPARENCY = 1.0;
   CONTOUR_LEVELS   = 80;
-  SMOOTH_SIGMA     = 0.5;       % 속도장 가우시안 스무딩 σ [격자 간격 단위, 0 = 끔]
-  OUTLIER_THRESH   = 2.0;       % 정규화 중앙값 검정 임계값 (작을수록 엄격, 0 = 끔)
+  SMOOTH_SIGMA     = 0;       % 속도장 가우시안 스무딩 σ [격자 간격 단위, 0 = 끔]
+  OUTLIER_THRESH   = 0;       % 정규화 중앙값 검정 임계값 (작을수록 엄격, 0 = 끔)
 
   %% ==========================================================
   %% 1) pivData 로드
@@ -51,17 +51,22 @@ function eff = MAENG_EffStrain(pivData)
   %% ==========================================================
   %% 3) 프레임 두 개 지정
   %% ==========================================================
-  ans_dialog = inputdlg( ...
-      {'프레임 A:', sprintf('프레임 B  (최대 %d):', Nt)}, ...
-      '비교할 프레임 두 개 입력', 1, {'1', num2str(Nt)});
+  if Nt == 1
+      frameA = 1;  frameB = 1;   % 페어 데이터: 프레임이 하나뿐이므로 대화상자 생략
+      fprintf('>> 페어 데이터(Nt=1): 단일 프레임 변형률을 표시합니다.\n');
+  else
+      ans_dialog = inputdlg( ...
+          {'프레임 A:', sprintf('프레임 B  (최대 %d):', Nt)}, ...
+          '비교할 프레임 두 개 입력', 1, {'1', num2str(Nt)});
 
-  if isempty(ans_dialog), disp('취소됨.'); eff = []; return; end
+      if isempty(ans_dialog), disp('취소됨.'); eff = []; return; end
 
-  frameA = round(str2double(ans_dialog{1}));
-  frameB = round(str2double(ans_dialog{2}));
-  frameA = max(1, min(frameA, Nt));
-  frameB = max(1, min(frameB, Nt));
-  fprintf('>> 선택 프레임: A=%d, B=%d\n', frameA, frameB);
+      frameA = round(str2double(ans_dialog{1}));
+      frameB = round(str2double(ans_dialog{2}));
+      frameA = max(1, min(frameA, Nt));
+      frameB = max(1, min(frameB, Nt));
+      fprintf('>> 선택 프레임: A=%d, B=%d\n', frameA, frameB);
+  end
 
   %% ==========================================================
   %% 4) 마스크 · 변형률 계산
@@ -93,22 +98,34 @@ function eff = MAENG_EffStrain(pivData)
   bgA = local_loadBgImage(fileList, frameA);
   bgB = local_loadBgImage(fileList, frameB);
 
-  fig = figure('Name', sprintf('Instantaneous Strain  A=%d  B=%d', frameA, frameB), ...
-               'Color', 'w', 'Position', [80 100 1400 620]);
+  if frameA == frameB
+      % 같은 프레임(페어 데이터 포함): 한 장만 표시
+      fig = figure('Name', sprintf('Instantaneous Strain  Frame %d', frameA), ...
+                   'Color', 'w', 'Position', [80 100 760 620]);
+      ax1 = axes('Parent', fig);
+      local_drawStrain(ax1, bgA, X_mm, Y_mm, EpsA, x_world, y_world, ...
+                       CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
+      cb1 = colorbar(ax1); local_styleColorbar(cb1, STRAIN_CLIM);
+      xlabel(ax1, 'x [mm]', 'FontSize', 12); ylabel(ax1, 'y [mm]', 'FontSize', 12);
+      title(ax1, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameA), 'FontSize', 13);
+  else
+      fig = figure('Name', sprintf('Instantaneous Strain  A=%d  B=%d', frameA, frameB), ...
+                   'Color', 'w', 'Position', [80 100 1400 620]);
 
-  ax1 = subplot(1, 2, 1, 'Parent', fig);
-  local_drawStrain(ax1, bgA, X_mm, Y_mm, EpsA, x_world, y_world, ...
-                   CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
-  cb1 = colorbar(ax1); local_styleColorbar(cb1, STRAIN_CLIM);
-  xlabel(ax1, 'x [mm]', 'FontSize', 12); ylabel(ax1, 'y [mm]', 'FontSize', 12);
-  title(ax1, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameA), 'FontSize', 13);
+      ax1 = subplot(1, 2, 1, 'Parent', fig);
+      local_drawStrain(ax1, bgA, X_mm, Y_mm, EpsA, x_world, y_world, ...
+                       CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
+      cb1 = colorbar(ax1); local_styleColorbar(cb1, STRAIN_CLIM);
+      xlabel(ax1, 'x [mm]', 'FontSize', 12); ylabel(ax1, 'y [mm]', 'FontSize', 12);
+      title(ax1, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameA), 'FontSize', 13);
 
-  ax2 = subplot(1, 2, 2, 'Parent', fig);
-  local_drawStrain(ax2, bgB, X_mm, Y_mm, EpsB, x_world, y_world, ...
-                   CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
-  cb2 = colorbar(ax2); local_styleColorbar(cb2, STRAIN_CLIM);
-  xlabel(ax2, 'x [mm]', 'FontSize', 12); ylabel(ax2, 'y [mm]', 'FontSize', 12);
-  title(ax2, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameB), 'FontSize', 13);
+      ax2 = subplot(1, 2, 2, 'Parent', fig);
+      local_drawStrain(ax2, bgB, X_mm, Y_mm, EpsB, x_world, y_world, ...
+                       CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
+      cb2 = colorbar(ax2); local_styleColorbar(cb2, STRAIN_CLIM);
+      xlabel(ax2, 'x [mm]', 'FontSize', 12); ylabel(ax2, 'y [mm]', 'FontSize', 12);
+      title(ax2, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameB), 'FontSize', 13);
+  end
 end
 
 
@@ -252,6 +269,20 @@ end
 %% 🛠 영구 마스크
 %% ==========================================================
 function tm = local_computePermanentMask(pivData, Ny, Nx, Nt)
+% 영구 마스크 = 이미지 마스크(공구 영역 등)로 가려진 격자점.
+% 엔진이 기록한 Status 비트1(masked)을 사용 — 상관 실패로 생긴 일시적 NaN과
+% 구분되므로 페어(Nt=1) 데이터에서도 구멍을 마스크로 오인하지 않음.
+  if isfield(pivData, 'Status') && ~isempty(pivData.Status)
+      masked = bitget(double(pivData.Status), 1) > 0;   % bit1 = masked
+      if ndims(masked) >= 3
+          tm = all(masked, 3);    % 시퀀스: 전 프레임 내내 마스크인 점만
+      else
+          tm = masked;            % 페어: 해당 프레임의 마스크 그대로
+      end
+      tm = logical(tm);
+      return;
+  end
+  % (fallback) Status가 없는 옛 데이터: 전 프레임 내내 0 또는 NaN인 점
   tm = true(Ny, Nx);
   for k = 1:Nt
       Uk = double(pivData.U(:,:,k));

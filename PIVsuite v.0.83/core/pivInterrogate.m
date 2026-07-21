@@ -165,6 +165,10 @@ if ~isfield(pivData,'imArray1')   % read files only if not read in the previous 
     catch      %#ok<CTCH>
     end
     
+    % RGB 등 다채널 이미지는 그레이스케일로 변환 (엔진은 2D 이미지를 가정)
+    if size(im1,3) > 1, im1 = mean(im1,3); end
+    if size(im2,3) > 1, im2 = mean(im2,3); end
+
     im1 = single(im1);
     im2 = single(im2);
     
@@ -187,23 +191,11 @@ if ~isfield(pivData,'imArray1')   % read files only if not read in the previous 
     else
         imMask2 = pivPar.imMask2;
     end
+    % 마스크가 RGB로 저장된 경우 첫 채널만 사용
+    if size(imMask1,3) > 1, imMask1 = imMask1(:,:,1); end
+    if size(imMask2,3) > 1, imMask2 = imMask2(:,:,1); end
     pivData.imMaskArray1 = imMask1;
     pivData.imMaskArray2 = imMask2;
-    
-% 자꾸 오류나서 내가 넣음 (지윤상 250522)
-s1 = [size(im1,1) size(im1,2) 1];   % ⇦ 패딩
-s2 = [size(im2,1) size(im2,2) 1];
-m1 = [size(imMask1,1) size(imMask1,2) 1];
-m2 = [size(imMask2,1) size(imMask2,2) 1];
-
-auxDiff = abs(s1-s2) + abs(m1-m2);
-
-disp('=== DEBUG SIZE START ===');
-disp(['im1:      ' mat2str(size(im1))]);
-disp(['im2:      ' mat2str(size(im2))]);
-disp(['imMask1:  ' mat2str(size(imMask1))]);
-disp(['imMask2:  ' mat2str(size(imMask2))]);
-disp('=== DEBUG SIZE END ===');
 
     % check the consistence of images
     auxDiff = abs(size(im1)-size(im2))+abs(size(imMask1)-size(imMask2));
