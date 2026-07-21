@@ -1,43 +1,32 @@
 function eff = pivEffStrain(pivData)
-% pivEffStrain — Lagrangian 누적 유효 변형률(Effective Strain) 계산 · 시각화 · 애니메이션
+% pivEffStrain — 두 프레임의 순간 유효 변형률률 계산 · 비교 시각화
 %
 %   ▶ F5(실행)만 눌러도 동작: 작업공간의 pivData 자동 로드 → 없으면 .mat 파일 선택
-%
-%   [요청 반영]
-%     1) 실행(Run/F5)만으로 동작        — pivData 자동 로드 + 파일 선택 폴백
-%     2) inputdlg 로 시작/끝 프레임 지정 — 미입력 시 1 ~ 끝(Nt)
-%     3) 컬러바를 참고 사진과 동일하게   — turbo, 0~6, ε_eff (프레임 간 색 스케일 고정)
-%     4) 변형률 누적 과정을 애니메이션으로 — 화면 재생 / MP4 저장 여부 선택
-%
-%   * 누적은 항상 1프레임부터 적분(=참고 사진처럼 t0 시점에도 누적값 존재).
-%     start~end 는 "표시 구간"이며, 영상은 표시 프레임마다 1번까지 역추적함.
+%   ▶ 프레임 두 개를 지정하면 각각의 순간 변형률을 나란히 표시
 
   %% ==========================================================
-  %% ⚙️ 사용자 설정 (User Settings)
+  %% ⚙️ 사용자 설정
   %% ==========================================================
-  dt        = 0.0005;     % 프레임 간 시간 간격 [s] (변형률 크기에는 무관, 기록용)
-  mmPerPx   = 0.00234;    % 1픽셀당 물리 길이 [mm/px]
-
-  STRAIN_CLIM      = [0 12];     % ★ 컬러바 범위 (참고 사진과 동일)
-  VIS_COLORMAP     = 'turbo';   % 컬러맵
-  VIS_TRANSPARENCY = 0.7;       % 오버레이 투명도 (배경 이미지가 비치도록)
-  CONTOUR_LEVELS   = 80;        % 채움 등고선 단계 수 (부드러운 그라데이션)
-  VIDEO_FPS        = 15;        % 출력 영상 프레임레이트
-  VIDEO_MAX_FRAMES = 150;       % 영상 기본 표시 프레임 수 상한 (자동 step 계산용)
+  mmPerPx          = 0.00234;   % 1픽셀당 물리 길이 [mm/px]
+  VIS_COLORMAP     = 'jet';
+  VIS_TRANSPARENCY = 1.0;
+  CONTOUR_LEVELS   = 80;
+  SMOOTH_SIGMA     = 0.5;       % 속도장 가우시안 스무딩 σ [격자 간격 단위, 0 = 끔]
+  OUTLIER_THRESH   = 2.0;       % 정규화 중앙값 검정 임계값 (작을수록 엄격, 0 = 끔)
 
   %% ==========================================================
-  %% 1) pivData 로드 — 실행만으로 동작
+  %% 1) pivData 로드
   %% ==========================================================
   if nargin < 1 || isempty(pivData)
       if evalin('base', 'exist(''pivData'',''var'')')
-          pivData = evalin('base', 'pivData');          % 작업공간 자동 로드
+          pivData = evalin('base', 'pivData');
           disp('>> 작업공간(base)의 pivData 를 불러왔습니다.');
       else
           [f, p] = uigetfile('*.mat', 'pivData 가 저장된 .mat 파일을 선택하세요');
           if isequal(f, 0), error('pivData 가 필요합니다. 실행을 취소합니다.'); end
           S = load(fullfile(p, f));
           if isfield(S, 'pivData'), pivData = S.pivData;
-          else, fn = fieldnames(S); pivData = S.(fn{1}); end   % 첫 변수 사용
+          else, fn = fieldnames(S); pivData = S.(fn{1}); end
           fprintf('>> 파일에서 pivData 를 불러왔습니다: %s\n', f);
       end
   end
@@ -47,7 +36,6 @@ function eff = pivEffStrain(pivData)
   %% ==========================================================
   if ndims(pivData.U) < 3
       [Ny, Nx] = size(pivData.U); Nt = 1;
-      warning('pivData.U 가 3차원(시퀀스)이 아닙니다. 단일 프레임으로 처리합니다.');
   else
       [Ny, Nx, Nt] = size(pivData.U);
   end
@@ -57,234 +45,176 @@ function eff = pivEffStrain(pivData)
   dx   = double(pivData.iaStepX) * mmPerPx;
   dy   = double(pivData.iaStepY) * mmPerPx;
 
-  x_world = [min(X_mm(:)) - dx/2, max(X_mm(:)) + dx/2];   % 배경 이미지 좌표 범위
+  x_world = [min(X_mm(:)) - dx/2, max(X_mm(:)) + dx/2];
   y_world = [min(Y_mm(:)) - dy/2, max(Y_mm(:)) + dy/2];
 
   %% ==========================================================
-  %% 3) 표시 프레임 구간 입력 (미입력/취소 시 1 ~ Nt)
+  %% 3) 프레임 두 개 지정
   %% ==========================================================
-  prompt     = {'시작 프레임:', sprintf('종료 프레임 (최대 %d):', Nt)};
-  ans_dialog = inputdlg(prompt, '표시 프레임 구간 설정', 1, {'1', num2str(Nt)});
-  if isempty(ans_dialog)
-      start_frame = 1; end_frame = Nt;                   % 취소 → 전체 구간
-  else
-      start_frame = round(str2double(ans_dialog{1}));
-      end_frame   = round(str2double(ans_dialog{2}));
-      if isnan(start_frame) || start_frame < 1, start_frame = 1;  end
-      if isnan(end_frame)   || end_frame   > Nt, end_frame   = Nt; end
-      if start_frame > end_frame
-          [start_frame, end_frame] = deal(end_frame, start_frame);
-      end
-  end
-  fprintf('>> 표시 구간: 프레임 %d ~ %d (누적은 항상 1프레임부터)\n', start_frame, end_frame);
+  ans_dialog = inputdlg( ...
+      {'프레임 A:', sprintf('프레임 B  (최대 %d):', Nt)}, ...
+      '비교할 프레임 두 개 입력', 1, {'1', num2str(Nt)});
+
+  if isempty(ans_dialog), disp('취소됨.'); eff = []; return; end
+
+  frameA = round(str2double(ans_dialog{1}));
+  frameB = round(str2double(ans_dialog{2}));
+  frameA = max(1, min(frameA, Nt));
+  frameB = max(1, min(frameB, Nt));
+  fprintf('>> 선택 프레임: A=%d, B=%d\n', frameA, frameB);
 
   %% ==========================================================
-  %% 4) 사전 계산: 영구 마스크 · 배경 파일 목록 · 정적(end_frame) 변형률
+  %% 4) 마스크 · 변형률 계산
   %% ==========================================================
-  trueMask = local_computePermanentMask(pivData, Ny, Nx, Nt);  % 공구 등 영구 마스크 (1회만)
-  fileList = local_buildFileList(pivData, Nt);                 % 배경 이미지 목록 (1회만)
+  trueMask = local_computePermanentMask(pivData, Ny, Nx, Nt);
+  fileList = local_buildFileList(pivData, Nt);
 
-  fprintf('>> 정적 변형률 맵 계산 (Frame 1 → %d)...\n', end_frame);
-  Eps_end = local_computeAccumStrain(pivData, end_frame, mmPerPx, X_mm, Y_mm, dx, dy, trueMask);
+  EpsA = local_computeFrameStrain(pivData, frameA, mmPerPx, X_mm, Y_mm, dx, dy, trueMask, SMOOTH_SIGMA, OUTLIER_THRESH);
+  EpsB = local_computeFrameStrain(pivData, frameB, mmPerPx, X_mm, Y_mm, dx, dy, trueMask, SMOOTH_SIGMA, OUTLIER_THRESH);
 
-  % 결과 구조체 (그림을 닫아도 반환되도록 먼저 구성)
-  eff.dt            = dt;
-  eff.mmPerPx       = mmPerPx;
-  eff.startFrame    = start_frame;
-  eff.endFrame      = end_frame;
-  eff.clim          = STRAIN_CLIM;
-  eff.eps_eff_accum = Eps_end;     % end_frame 기준 2D 누적 유효 변형률
-  eff.X_mm          = X_mm;
-  eff.Y_mm          = Y_mm;
+  % 컬러바 범위: 두 프레임 데이터 합산 기준 자동 결정
+  all_vals = [EpsA(isfinite(EpsA)); EpsB(isfinite(EpsB))];
+  clim_max = max(prctile(all_vals, 99), 0.01);
+  STRAIN_CLIM = [0, clim_max];
+  fprintf('>> 컬러바 범위 자동 설정: [0  %.3f]\n', clim_max);
+
+  eff.mmPerPx     = mmPerPx;
+  eff.frameA      = frameA;
+  eff.frameB      = frameB;
+  eff.clim        = STRAIN_CLIM;
+  eff.epsA        = EpsA;
+  eff.epsB        = EpsB;
+  eff.X_mm        = X_mm;
+  eff.Y_mm        = Y_mm;
 
   %% ==========================================================
-  %% 🎨 정적 시각화: end_frame 누적 변형률 맵
+  %% 🎨 나란히 비교 시각화
   %% ==========================================================
-  fig1 = figure('Name', sprintf('Accumulated Strain (Frame 1 -> %d)', end_frame), 'Color', 'w');
-  ax1  = axes('Parent', fig1);
-  bg1  = local_loadBgImage(fileList, end_frame);
+  bgA = local_loadBgImage(fileList, frameA);
+  bgB = local_loadBgImage(fileList, frameB);
 
-  local_drawStrain(ax1, bg1, X_mm, Y_mm, Eps_end, x_world, y_world, ...
+  fig = figure('Name', sprintf('Instantaneous Strain  A=%d  B=%d', frameA, frameB), ...
+               'Color', 'w', 'Position', [80 100 1400 620]);
+
+  ax1 = subplot(1, 2, 1, 'Parent', fig);
+  local_drawStrain(ax1, bgA, X_mm, Y_mm, EpsA, x_world, y_world, ...
                    CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
-  axis(ax1, 'tight');
   cb1 = colorbar(ax1); local_styleColorbar(cb1, STRAIN_CLIM);
-  xlabel(ax1, 'x [mm]', 'FontSize', 12);
-  ylabel(ax1, 'y [mm]', 'FontSize', 12);
-  title(ax1, sprintf('누적 유효 변형률  (Frame 1 \\rightarrow %d)', end_frame), 'FontSize', 13);
+  xlabel(ax1, 'x [mm]', 'FontSize', 12); ylabel(ax1, 'y [mm]', 'FontSize', 12);
+  title(ax1, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameA), 'FontSize', 13);
 
-  %% ==========================================================
-  %% 🖱️ (선택) 관심 영역(ROI) 잘라내어 별도 표시
-  %% ==========================================================
-  if strcmp(questdlg('관심 영역(ROI)을 잘라내어 별도로 표시할까요?', ...
-                     'ROI Crop', '예', '아니오', '아니오'), '예')
-      figure(fig1);
-      disp('>> fig1 화면에서 사각형 영역을 마우스로 드래그하세요...');
-      rect  = getrect(fig1);
-      dROI  = [rect(1), rect(1)+rect(3), rect(2), rect(2)+rect(4)];
-      mROI  = (X_mm >= dROI(1) & X_mm <= dROI(2)) & (Y_mm >= dROI(3) & Y_mm <= dROI(4));
-      Ecrop = Eps_end; Ecrop(~mROI) = NaN;
+  ax2 = subplot(1, 2, 2, 'Parent', fig);
+  local_drawStrain(ax2, bgB, X_mm, Y_mm, EpsB, x_world, y_world, ...
+                   CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
+  cb2 = colorbar(ax2); local_styleColorbar(cb2, STRAIN_CLIM);
+  xlabel(ax2, 'x [mm]', 'FontSize', 12); ylabel(ax2, 'y [mm]', 'FontSize', 12);
+  title(ax2, sprintf('순간 \\epsilon_{eff}  (Frame %d)', frameB), 'FontSize', 13);
+end
 
-      fig2 = figure('Name', 'ROI Strain Field', 'Color', 'w');
-      ax2  = axes('Parent', fig2);
-      local_drawStrain(ax2, bg1, X_mm, Y_mm, Ecrop, x_world, y_world, ...
-                       CONTOUR_LEVELS, 1.0, VIS_COLORMAP, STRAIN_CLIM);   % 잘라낸 영역은 불투명
-      xlim(ax2, x_world); ylim(ax2, y_world);
-      cb2 = colorbar(ax2); local_styleColorbar(cb2, STRAIN_CLIM);
-      xlabel(ax2, 'x [mm]'); ylabel(ax2, 'y [mm]');
-      title(ax2, '잘라낸 영역 변형률 필드');
+
+%% ==========================================================
+%% 🛠 단일 프레임 순간 유효 변형률 계산
+%% ==========================================================
+function Eps2D = local_computeFrameStrain(pivData, frame, mmPerPx, X_mm, Y_mm, dx, dy, trueMask, smoothSigma, outlierThresh)
+  Uk = double(pivData.U(:,:,frame)) * mmPerPx;
+  Vk = double(pivData.V(:,:,frame)) * mmPerPx;
+
+  % 불량 벡터 검출 (정규화 중앙값 검정) — 노이즈를 스무딩 전에 원천 제거
+  if outlierThresh > 0
+      eps0 = 0.1 * mmPerPx;   % 서브픽셀 상관 노이즈 수준 (~0.1 px)
+      bad  = local_normMedianTest(Uk, outlierThresh, eps0) | ...
+             local_normMedianTest(Vk, outlierThresh, eps0);
+      bad  = bad & ~trueMask;
+      if any(bad(:))
+          Uk(bad) = NaN;  Vk(bad) = NaN;
+          fprintf('>> Frame %d: 불량 벡터 %d개 검출·제거 (중앙값 검정)\n', frame, nnz(bad));
+      end
   end
 
-  %% ==========================================================
-  %% 🎬 누적 변형률 애니메이션 (화면 재생 / MP4 저장)
-  %% ==========================================================
-  if strcmp(questdlg('변형률 누적 과정을 애니메이션으로 보시겠습니까?', ...
-                     '애니메이션', '예', '아니오', '예'), '예')
+  % 일시적 결측(상관 실패 등)은 속도를 보간해서 채움 — 영구 마스크(공구 영역 등)는 유지
+  nHoles = nnz(isnan(Uk) & ~trueMask);
+  if nHoles > 0
+      Uk = local_fillHoles(Uk, X_mm, Y_mm, trueMask);
+      Vk = local_fillHoles(Vk, X_mm, Y_mm, trueMask);
+      fprintf('>> Frame %d: 결측 벡터 %d개를 보간으로 채움\n', frame, nHoles);
+  end
 
-      doSave = strcmp(questdlg('애니메이션을 MP4 파일로 저장할까요?  (아니오 = 화면 재생만)', ...
-                               '영상 저장', '예', '아니오', '아니오'), '예');
-      vw = []; savePath = '';
-      if doSave
-          [vf, vp] = uiputfile('*.mp4', 'MP4 저장 위치/이름', 'strain_animation.mp4');
-          if isequal(vf, 0)
-              doSave = false; disp('>> 저장 취소 → 화면 재생만 진행합니다.');
-          else
-              savePath = fullfile(vp, vf);
-              vw = VideoWriter(savePath, 'MPEG-4');
-              vw.Quality = 100; vw.FrameRate = VIDEO_FPS; open(vw);
+  % 미분 전 속도장 스무딩 — 미분에 의한 노이즈 증폭 억제
+  if smoothSigma > 0
+      Uk = local_nanGaussSmooth(Uk, smoothSigma);
+      Vk = local_nanGaussSmooth(Vk, smoothSigma);
+  end
+
+  [dUdx, dUdy] = local_nanGradient(Uk, dx, dy);
+  [dVdx, dVdy] = local_nanGradient(Vk, dx, dy);
+
+  eps_xx = dUdx;
+  eps_yy = dVdy;
+  eps_xy = 0.5 * (dUdy + dVdx);
+  Eps2D  = sqrt((2/3) * (eps_xx.^2 + eps_yy.^2 + 2*eps_xy.^2));
+
+  Eps2D(trueMask) = NaN;
+end
+
+
+%% ==========================================================
+%% 🛠 정규화 중앙값 검정 (Westerweel & Scarano, 2005)
+%% ==========================================================
+function bad = local_normMedianTest(F, thresh, eps0)
+  [Ny, Nx] = size(F);
+  bad = false(Ny, Nx);
+  for i = 1:Ny
+      for j = 1:Nx
+          if isnan(F(i,j)), continue; end
+          i0 = max(1, i-1); i1 = min(Ny, i+1);
+          j0 = max(1, j-1); j1 = min(Nx, j+1);
+          nb = F(i0:i1, j0:j1);
+          nb(i-i0+1, j-j0+1) = NaN;          % 중심점 제외
+          nb = nb(~isnan(nb));
+          if numel(nb) < 3, continue; end     % 이웃이 부족하면 판정 보류
+          med  = median(nb);
+          resm = median(abs(nb - med));       % 이웃 잔차의 중앙값
+          if abs(F(i,j) - med) / (resm + eps0) > thresh
+              bad(i,j) = true;
           end
       end
-
-      % 표시 프레임 자동 솎기 (상한 VIDEO_MAX_FRAMES) — O(N^2) 부담 완화
-      span   = end_frame - start_frame + 1;
-      step   = max(1, ceil(span / VIDEO_MAX_FRAMES));
-      frames = start_frame:step:end_frame;
-      nF     = numel(frames);
-      fprintf('>> 애니메이션 렌더링: 프레임 %d~%d, step=%d, 총 %d장\n', ...
-              start_frame, end_frame, step, nF);
-      if span > 400
-          warning(['표시 구간이 큽니다. 각 프레임마다 1번 프레임까지 역추적하므로 ', ...
-                   '시간이 걸릴 수 있습니다.']);
-      end
-
-      figV = figure('Name', 'Accumulated Effective Strain — Animation', ...
-                    'Color', 'w', 'Position', [120 120 900 650]);
-      axV  = axes('Parent', figV);
-      hWB  = waitbar(0, '변형률 누적 영상 생성 중...');
-      refSize = [];   % 저장 프레임 크기 일관성 기준
-
-      for ii = 1:nF
-          k  = frames(ii);
-          Ek = local_computeAccumStrain(pivData, k, mmPerPx, X_mm, Y_mm, dx, dy, trueMask);
-          bg = local_loadBgImage(fileList, k);
-
-          local_drawStrain(axV, bg, X_mm, Y_mm, Ek, x_world, y_world, ...
-                           CONTOUR_LEVELS, VIS_TRANSPARENCY, VIS_COLORMAP, STRAIN_CLIM);
-          xlim(axV, x_world); ylim(axV, y_world);
-          cbV = colorbar(axV); local_styleColorbar(cbV, STRAIN_CLIM);
-          xlabel(axV, 'x [mm]'); ylabel(axV, 'y [mm]');
-          title(axV, sprintf('Accumulated \\epsilon_{eff}   (Frame %d / %d)', k, end_frame), ...
-                'FontSize', 13);
-          drawnow;
-
-          if doSave && ~isempty(vw)
-              frm = print(figV, '-RGBImage', '-r150');          % 모니터 독립 캡처
-              hh = size(frm,1); ww = size(frm,2);
-              frm = frm(1:hh-mod(hh,2), 1:ww-mod(ww,2), :);     % 코덱용 짝수 크기 보정
-              if isempty(refSize)
-                  refSize = [size(frm,1) size(frm,2)];
-              elseif ~isequal([size(frm,1) size(frm,2)], refSize)
-                  frm = imresize(frm, refSize);                 % 프레임 크기 일관성 유지
-              end
-              writeVideo(vw, frm);
-          end
-          if isvalid(hWB), waitbar(ii/nF, hWB); end
-      end
-
-      if isvalid(hWB), close(hWB); end
-      if doSave && ~isempty(vw)
-          close(vw);
-          fprintf('>> 영상 저장 완료: %s\n', savePath);
-      end
-      disp('>> 애니메이션 완료.');
   end
 end
 
 
 %% ==========================================================
-%% 🛠 [핵심] target_frame 기준 백워드 라그랑지안 누적 변형률 (기존 로직 동일)
+%% 🛠 속도 필드 가우시안 스무딩 (NaN 인지형)
 %% ==========================================================
-function Eps2D = local_computeAccumStrain(pivData, targetFrame, mmPerPx, X_mm, Y_mm, dx, dy, trueMask)
-  Px  = X_mm(:);  Py = Y_mm(:);
-  Eps = zeros(size(Px));
+function Fs = local_nanGaussSmooth(F, sigma)
+% NaN 영역을 침범하지 않는 가우시안 스무딩 (정규화 컨볼루션)
+  r = max(1, ceil(3 * sigma));
+  g = exp(-((-r:r).^2) / (2 * sigma^2));
+  K = g' * g;
+  K = K / sum(K(:));
 
-  for k = targetFrame:-1:1
-      Uk = double(pivData.U(:,:,k)) * mmPerPx;
-      Vk = double(pivData.V(:,:,k)) * mmPerPx;
-
-      % NaN(마스크) 보존
-      isMasked = isnan(Uk);
-      Uk(isMasked) = NaN;  Vk(isMasked) = NaN;
-
-      % 결측치 인지형 편측 미분 → 변형률 증분(rate가 아닌 프레임당 증분)
-      [dUdx, dUdy] = local_nanGradient(Uk, dx, dy);
-      [dVdx, dVdy] = local_nanGradient(Vk, dx, dy);
-      deps_xx  = dUdx;
-      deps_yy  = dVdy;
-      deps_xy  = 0.5 * (dUdy + dVdx);
-      deps_eff = sqrt((2/3) * (deps_xx.^2 + deps_yy.^2 + 2*deps_xy.^2));
-
-      % 현재 입자 위치에서 증분 적분
-      deps_p = interp2(X_mm, Y_mm, deps_eff, Px, Py, 'linear', NaN);
-      v = ~isnan(deps_p);
-      Eps(v) = Eps(v) + deps_p(v);
-
-      if k == 1, break; end
-
-      % 역방향 1스텝 이류 (마스크 메움값으로 위치 갱신)
-      U_filled = inpaint_nans(Uk, 4);
-      V_filled = inpaint_nans(Vk, 4);
-      Up = interp2(X_mm, Y_mm, U_filled, Px, Py, 'linear', 0);
-      Vp = interp2(X_mm, Y_mm, V_filled, Px, Py, 'linear', 0);
-      Px_new = Px - Up;
-      Py_new = Py - Vp;
-
-      % 장애물(마스크) 충돌 입자 → 각도 탐색으로 우회 (기존 로직 동일)
-      destChk = interp2(X_mm, Y_mm, Uk, Px_new, Py_new, 'nearest', NaN);
-      hit     = isnan(destChk) & ~isnan(Px);
-      hi      = find(hit);
-      if ~isempty(hi)
-          spd  = sqrt(Up(hi).^2 + Vp(hi).^2);
-          ang0 = atan2(-Vp(hi), -Up(hi));
-          angs = [5,-5,15,-15,30,-30,45,-45,60,-60,75,-75,89,-89] * (pi/180);
-
-          Pxc = Px(hi);  Pyc = Py(hi);
-          Pxr = Pxc;     Pyr = Pyc;
-          res = false(numel(hi), 1);
-
-          for ao = angs
-              if all(res), break; end
-              un = ~res;
-              at = ang0(un) + ao;
-              xt = Pxc(un) + cos(at) .* spd(un);
-              yt = Pyc(un) + sin(at) .* spd(un);
-              tv = ~isnan(interp2(X_mm, Y_mm, Uk, xt, yt, 'nearest', NaN));
-
-              gi = find(un);  gv = gi(tv);
-              Pxr(gv) = xt(tv);  Pyr(gv) = yt(tv);  res(gv) = true;
-          end
-          Px_new(hi) = Pxr;  Py_new(hi) = Pyr;
-      end
-
-      Px = Px_new;  Py = Py_new;
-  end
-
-  Eps2D = reshape(Eps, size(X_mm));
-  Eps2D(trueMask) = NaN;     % 영구 마스크(공구 등) 제거
+  valid = ~isnan(F);
+  F0 = F;  F0(~valid) = 0;
+  num = conv2(F0, K, 'same');
+  den = conv2(double(valid), K, 'same');
+  Fs = num ./ den;
+  Fs(~valid) = NaN;
 end
 
 
 %% ==========================================================
-%% 🛠 결측치 인지형 편측 미분 (NaN-Aware Gradient)
+%% 🛠 속도 필드 결측 보간 (영구 마스크 제외)
+%% ==========================================================
+function F = local_fillHoles(F, X_mm, Y_mm, trueMask)
+  valid = ~isnan(F);
+  holes = ~valid & ~trueMask;
+  if ~any(holes(:)) || nnz(valid) < 4, return; end
+  Fi = scatteredInterpolant(X_mm(valid), Y_mm(valid), F(valid), 'natural', 'nearest');
+  F(holes) = Fi(X_mm(holes), Y_mm(holes));
+end
+
+
+%% ==========================================================
+%% 🛠 결측치 인지형 편측 미분
 %% ==========================================================
 function [dFdx, dFdy] = local_nanGradient(F, dx, dy)
   [Ny, Nx] = size(F);
@@ -319,7 +249,7 @@ end
 
 
 %% ==========================================================
-%% 🛠 영구 마스크: 전 프레임에서 (U=V=0) 또는 NaN 인 화소 (공구 등)
+%% 🛠 영구 마스크
 %% ==========================================================
 function tm = local_computePermanentMask(pivData, Ny, Nx, Nt)
   tm = true(Ny, Nx);
@@ -332,7 +262,7 @@ end
 
 
 %% ==========================================================
-%% 🛠 배경 이미지 파일 목록 구성 (1회만) — imFilename2 → imFilename1 → imagePath
+%% 🛠 배경 이미지 파일 목록
 %% ==========================================================
 function fl = local_buildFileList(pivData, Nt)
   fl = {};
@@ -341,9 +271,9 @@ function fl = local_buildFileList(pivData, Nt)
       if isfield(pivData, fn)
           val = pivData.(fn);
           if iscell(val) && ~isempty(val)
-              fl = val(:); return;                                  % 프레임별 cell
+              fl = val(:); return;
           elseif (ischar(val) || isstring(val)) && exist(char(val), 'file')
-              fl = repmat({char(val)}, Nt, 1); return;              % 단일 파일
+              fl = repmat({char(val)}, Nt, 1); return;
           end
       end
   end
@@ -361,7 +291,7 @@ end
 
 
 %% ==========================================================
-%% 🛠 프레임 배경 이미지 로드 (RGB 보장)
+%% 🛠 배경 이미지 로드
 %% ==========================================================
 function img = local_loadBgImage(fileList, frame)
   img = [];
@@ -371,7 +301,7 @@ function img = local_loadBgImage(fileList, frame)
   if (ischar(fn) || isstring(fn)) && exist(char(fn), 'file')
       try
           img = imread(char(fn));
-          if size(img, 3) == 1, img = cat(3, img, img, img); end   % truecolor 화 (컬러맵 비충돌)
+          if size(img, 3) == 1, img = cat(3, img, img, img); end
       catch
           img = [];
       end
@@ -380,35 +310,34 @@ end
 
 
 %% ==========================================================
-%% 🛠 변형률 필드 1장 그리기 (배경 + contourf, 색 스케일 고정)
+%% 🛠 변형률 필드 그리기
 %% ==========================================================
 function local_drawStrain(ax, bg, X_mm, Y_mm, Eps2D, x_world, y_world, levels, alphaVal, cmap, climv)
   cla(ax);
   hold(ax, 'on');
 
   if ~isempty(bg)
-      image('Parent', ax, 'XData', x_world, 'YData', y_world, 'CData', bg);  % truecolor 배경
+      image('Parent', ax, 'XData', x_world, 'YData', y_world, 'CData', bg);
   end
   set(ax, 'YDir', 'reverse');
 
-  % ★ 레벨을 [climv]에 고정 → 프레임 간 색 스케일 일관 (계단 대신 부드러운 그라데이션)
   lv = linspace(climv(1), climv(2), levels);
   [~, hC] = contourf(ax, X_mm, Y_mm, Eps2D, lv, 'LineStyle', 'none');
-  try, alpha(hC, alphaVal); catch, end   % 등고선 채움 투명도 (배경 비침)
+  try, alpha(hC, alphaVal); catch, end
 
-  daspect(ax, [1 1 1]);                   % 정사각 픽셀(axis equal과 한계 충돌 방지)
+  daspect(ax, [1 1 1]);
   box(ax, 'on');
   colormap(ax, cmap);
-  caxis(ax, climv);                       % ★ 0~6 고정
+  caxis(ax, climv);
   hold(ax, 'off');
 end
 
 
 %% ==========================================================
-%% 🛠 컬러바 스타일 (참고 사진과 동일: 0/2/4/6 눈금, ε_eff)
+%% 🛠 컬러바 스타일
 %% ==========================================================
 function local_styleColorbar(cb, climv)
   cb.Limits = climv;
-  cb.Ticks  = linspace(climv(1), climv(2), 4);   % 0, 2, 4, 6
+  cb.Ticks  = linspace(climv(1), climv(2), 5);
   ylabel(cb, '$\epsilon_{eff}$', 'Interpreter', 'latex', 'FontSize', 14);
 end
