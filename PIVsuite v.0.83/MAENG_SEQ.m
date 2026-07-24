@@ -13,7 +13,7 @@ addpath(fullfile(thisDir,'core'), fullfile(thisDir,'postprocess'));
 
 %% 1. 이미지 및 마스크 경로 설정
 % 데이터 폴더는 스크립트 위치 기준 절대경로로 고정 (MATLAB 현재 폴더와 무관하게 동작)
-dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', 'T2_T3'), '\', '/');
+dataRoot  = strrep(fullfile(fileparts(thisDir), 'Data', 'BUE 형성 메커니즘 2'), '\', '/');
 USE_MASK  = true;                      % ★ 마스크 on/off (false면 마스크 없이 전체 영역 분석)
 maskPath  = [dataRoot, '/mask.bmp'];   % 마스크 이미지 경로 (USE_MASK=false면 무시됨)
 imagePath = dataRoot;                  % PIV 원본 이미지 경로
@@ -43,6 +43,10 @@ pivPar.seqDiff = 1;             % 페어 내 프레임 간격 (1-2, 2-3 ...)
 
 pivPar.iaSizeX = [48 24 12];   % 4번의 pass에 대한 IA 크기
 pivPar.iaStepX = [24 12 6];     % 공간 분해능(해상도)
+
+% 상관법 fft 고정 — IA<=12인 pass는 자동으로 dcn으로 바뀌는데,
+% dcn은 2차 피크(ccPeakSecondary)를 계산하지 않아 SNR 검증이 불가능해짐
+pivPar.ccMethod = 'fft';
 
 % -------------------------------------------------------------------------
 % [데이터 저장 및 불러오기 설정]
@@ -84,10 +88,13 @@ fprintf('PIV 시퀀스 분석을 시작합니다...\n');
 ccPeakAll  = pivData.ccPeak;                   % 1차 피크 (ny x nx x Nt)
 ccPeak2All = pivData.ccPeakSecondary;          % 2차 피크 (ny x nx x Nt)
 
-% SNR(=Detectability) 계산. 분모가 NaN인 위치는 ccPeak로 대체하여 SNR=1로 처리.
-auxNaN = isnan(ccPeak2All);
-ccPeak2All(auxNaN) = ccPeakAll(auxNaN);
-snrAll = ccPeakAll ./ ccPeak2All;              % (ny x nx x Nt)
+% SNR(=Detectability) 계산. 2차 피크 미검출(NaN/극소) = 매우 깨끗한 상관이므로
+% 상한(SNR_CAP)으로 클립 — 바닥값 나눗셈으로 SNR이 수백~수천으로 폭발하는 것 방지.
+SNR_CAP = 20;                                  % 논문에 "SNR clipped at 20" 명시
+snrAll = ccPeakAll ./ ccPeak2All;
+snrAll(~isnan(ccPeakAll) & (isnan(ccPeak2All) | ccPeak2All < 1e-3)) = SNR_CAP;
+snrAll = min(snrAll, SNR_CAP);                 % (ny x nx x Nt)
+snrAll(isnan(ccPeakAll)) = NaN;
 
 Nt = pivData.Nt;                               % 프레임 수
 Xax = pivData.X(1,:);                          % x축 좌표 벡터
@@ -136,11 +143,14 @@ if ~exist('ccPeakAll','var')
     Nt  = pivData.Nt;
 end
 
-% --- 7-1. SNR 계산 (분모 안전화)
+% --- 7-1. SNR 계산 (2차 피크 미검출 = 상한 클립, 섹션 4.5와 동일 규약)
+if ~exist('SNR_CAP','var'), SNR_CAP = 20; end
 cc2safe = pivData.ccPeakSecondary;
-cc2safe(isnan(cc2safe) | cc2safe < 1e-3) = 1e-3;
 snrAll = ccPeakAll ./ cc2safe;
+snrAll(~isnan(ccPeakAll) & (isnan(cc2safe) | cc2safe < 1e-3)) = SNR_CAP;
+snrAll = min(snrAll, SNR_CAP);
 snrAll(snrAll < 0) = 0;
+snrAll(isnan(ccPeakAll)) = NaN;
 
 % --- 7-2. 시간 평균 (공간 맵용) + 마스크 보존
 snrMean = mean(snrAll, 3, 'omitnan');

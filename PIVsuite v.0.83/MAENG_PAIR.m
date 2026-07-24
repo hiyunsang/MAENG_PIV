@@ -47,8 +47,12 @@ else
 end
 
 %% 3. PIV 파라미터 (MAENG_SEQ와 동일한 다중 pass 구성)
-pivPar.iaSizeX = [32 16 8];    % 각 pass의 IA(조사창) 크기
-pivPar.iaStepX = [12 8 4];     % 공간 분해능(격자 간격)
+pivPar.iaSizeX = [64 32 16];    % 각 pass의 IA(조사창) 크기
+pivPar.iaStepX = [32 16 8];     % 공간 분해능(격자 간격)
+
+% 상관법 fft 고정 — IA<=12인 pass는 자동으로 dcn으로 바뀌는데,
+% dcn은 2차 피크(ccPeakSecondary)를 계산하지 않아 SNR 검증이 불가능해짐
+pivPar.ccMethod = 'fft';
 
 % [안정성 확보] 마스크 사용 시: 마스킹된 빈 공간을 억지로 보간하려다 발생하는
 % inpaint_nans (Rank deficient) 에러를 방지하기 위해 대체(Replacement) 기능을 끕니다.
